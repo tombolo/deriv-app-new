@@ -2,7 +2,6 @@ import React from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
 import classNames from 'classnames';
 import { FaWhatsapp, FaInstagram, FaTelegramPlane, FaTiktok } from 'react-icons/fa';
-
 import { useRemoteConfig } from '@deriv/api';
 import { Div100vhContainer, Icon, MobileDrawer, ToggleSwitch } from '@deriv/components';
 import {
@@ -388,9 +387,8 @@ const ToggleMenuDrawer = observer(({ platform_config }) => {
                                 {primary_routes_config.map((route_config, idx) =>
                                     getRoutesWithSubMenu(route_config, idx)
                                 )}
-                                {!has_wallet &&
-                                    
-                                        <MobileDrawer.Item
+                                {!has_wallet && (
+                                    <MobileDrawer.Item
                                         className='header__menu-mobile-theme'
                                         onClick={e => {
                                             e.preventDefault();
@@ -409,7 +407,7 @@ const ToggleMenuDrawer = observer(({ platform_config }) => {
                                             />
                                         </div>
                                     </MobileDrawer.Item>
-                                    }
+                                )}
                                 {HelpCentreRoute()}
                                 {is_logged_in ? (
                                     <React.Fragment>
@@ -435,7 +433,44 @@ const ToggleMenuDrawer = observer(({ platform_config }) => {
                                                 onClickLink={toggleDrawer}
                                             />
                                         </MobileDrawer.Item>
-                                        
+
+                                        <MobileDrawer.Item>
+                                            <a
+                                                href='https://wa.me/yourwhatsappnumber'
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='header__menu-mobile-link'
+                                            >
+                                                <FaWhatsapp className='header__menu-mobile-link-icon' />
+                                                <span className='header__menu-mobile-link-text'>WhatsApp</span>
+                                            </a>
+                                        </MobileDrawer.Item>
+
+                                        {/* Telegram */}
+                                        <MobileDrawer.Item>
+                                            <a
+                                                href='https://t.me/yourtelegramchannel'
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='header__menu-mobile-link'
+                                            >
+                                                <FaTelegramPlane className='header__menu-mobile-link-icon' />
+                                                <span className='header__menu-mobile-link-text'>Telegram</span>
+                                            </a>
+                                        </MobileDrawer.Item>
+
+                                        {/* TikTok */}
+                                        <MobileDrawer.Item>
+                                            <a
+                                                href='https://www.tiktok.com/@yourtiktokaccount'
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='header__menu-mobile-link'
+                                            >
+                                                <FaTiktok className='header__menu-mobile-link-icon' />
+                                                <span className='header__menu-mobile-link-text'>TikTok</span>
+                                            </a>
+                                        </MobileDrawer.Item>
 
                                         {should_show_regulatory_information && (
                                             <MobileDrawer.Item className='header__menu-mobile-theme--trader-hub'>
