@@ -3,38 +3,53 @@ import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
 
-// Hardcoded XML strategies
-const HARDCODED_STRATEGIES = {
-    'gle-traders-1': {
-        id: 'gle-traders-1',
-        name: 'GLE Traders 1',
-        xml: `
-            <xml xmlns="https://developers.google.com/blockly/xml" collection="true" is_dbot="true">
-                <!-- Your GLE Traders 1 blocks here -->
-                <block type="strategies" deletable="false" movable="false">
-                    <field name="STRATEGY_NAME">GLE Traders 1</field>
-                    <!-- Add more blocks as needed -->
-                </block>
-            </xml>
-        `,
+// File-based strategy configuration
+const FILE_BASED_STRATEGIES = {
+    'auto-robot-gle1': {
+        id: 'auto-robot-gle1',
+        name: 'Auto Robot by GLE1',
+        filename: 'Auto_robot_by_GLE1.xml',
         timestamp: Date.now(),
         save_type: save_types.LOCAL,
     },
-    'gle-traders-2': {
-        id: 'gle-traders-2',
-        name: 'GLE Traders 2',
-        xml: `
-            <xml xmlns="https://developers.google.com/blockly/xml" collection="true" is_dbot="true">
-                <!-- Your GLE Traders 2 blocks here -->
-                <block type="strategies" deletable="false" movable="false">
-                    <field name="STRATEGY_NAME">GLE Traders 2</field>
-                    <!-- Add more blocks as needed -->
-                </block>
-            </xml>
-        `,
-        timestamp: Date.now(),
-        save_type: save_types.LOCAL,
-    },
+    // Add more file-based strategies here as needed
+};
+
+/**
+ * Load strategy XML from public/bots directory
+ */
+const loadStrategyFromFile = async filename => {
+    try {
+        const response = await fetch(`/bots/${filename}`);
+        if (!response.ok) throw new Error('Failed to load strategy');
+        return await response.text();
+    } catch (error) {
+        console.error(`Error loading strategy ${filename}:`, error);
+        return null;
+    }
+};
+
+/**
+ * Get all file-based strategies with their XML content
+ */
+const getFileStrategies = async () => {
+    const strategies = [];
+
+    for (const [strategyId, config] of Object.entries(FILE_BASED_STRATEGIES)) {
+        const xml = await loadStrategyFromFile(config.filename);
+        if (xml) {
+            strategies.push({
+                id: strategyId,
+                name: config.name,
+                xml,
+                timestamp: config.timestamp,
+                save_type: config.save_type,
+                is_file_based: true,
+            });
+        }
+    }
+
+    return strategies;
 };
 
 /**
@@ -71,15 +86,9 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
         });
     }
 
-    workspaces
-        .sort((a, b) => {
-            return new Date(a.timestamp) - new Date(b.timestamp);
-        })
-        .reverse();
+    // Sort by timestamp (newest first) and keep only 10 most recent
+    workspaces.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
 
-    if (workspaces.length > 10) {
-        workspaces.pop();
-    }
     updateListStrategies(workspaces);
     localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
 };
@@ -87,56 +96,63 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
 export const getSavedWorkspaces = async () => {
     try {
         const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
+        const fileStrategies = await getFileStrategies();
 
-        // Merge hardcoded strategies with saved ones
-        const hardcoded = Object.values(HARDCODED_STRATEGIES);
-        const merged = [...hardcoded, ...saved];
-
-        // Remove duplicates (in case a hardcoded strategy was modified and saved)
-        const unique = merged.reduce((acc, current) => {
-            const x = acc.find(item => item.id === current.id);
-            if (!x) {
-                return acc.concat([current]);
-            } else {
-                return acc;
+        // Merge strategies, giving priority to saved versions
+        const merged = [...fileStrategies];
+        saved.forEach(savedStrategy => {
+            if (!fileStrategies.some(fs => fs.id === savedStrategy.id)) {
+                merged.push(savedStrategy);
             }
-        }, []);
+        });
 
-        return unique;
+        return merged;
     } catch (e) {
-        return Object.values(HARDCODED_STRATEGIES);
+        return await getFileStrategies();
     }
 };
 
-export const getHardcodedStrategy = strategy_id => {
-    return HARDCODED_STRATEGIES[strategy_id];
+export const loadStrategy = async strategy_id => {
+    // First try to load from files
+    const fileStrategies = await getFileStrategies();
+    const fileStrategy = fileStrategies.find(s => s.id === strategy_id);
+    if (fileStrategy) {
+        return loadXmlToWorkspace(fileStrategy.xml, strategy_id);
+    }
+
+    // Fall back to saved strategies
+    const savedStrategies = await getSavedWorkspaces();
+    const savedStrategy = savedStrategies.find(s => s.id === strategy_id);
+    if (savedStrategy) {
+        return loadXmlToWorkspace(savedStrategy.xml, strategy_id);
+    }
+
+    return false;
 };
 
-export const loadHardcodedStrategy = strategy_id => {
-    const strategy = HARDCODED_STRATEGIES[strategy_id];
-    if (!strategy) return false;
+const loadXmlToWorkspace = (xml, strategy_id) => {
+    try {
+        const parser = new DOMParser();
+        const xmlDom = parser.parseFromString(xml, 'text/xml').documentElement;
+        const convertedXml = convertStrategyToIsDbot(xmlDom);
 
-    const parser = new DOMParser();
-    const xmlDom = parser.parseFromString(strategy.xml, 'text/xml').documentElement;
-    const convertedXml = convertStrategyToIsDbot(xmlDom);
-
-    Blockly.Xml.domToWorkspace(convertedXml, Blockly.derivWorkspace);
-    Blockly.derivWorkspace.current_strategy_id = strategy_id;
-    return true;
+        Blockly.Xml.domToWorkspace(convertedXml, Blockly.derivWorkspace);
+        Blockly.derivWorkspace.current_strategy_id = strategy_id;
+        return true;
+    } catch (error) {
+        console.error('Error loading strategy:', error);
+        return false;
+    }
 };
 
 export const removeExistingWorkspace = async workspace_id => {
-    // Don't allow deletion of hardcoded strategies
-    if (HARDCODED_STRATEGIES[workspace_id]) return false;
+    // Don't allow deletion of file-based strategies
+    if (FILE_BASED_STRATEGIES[workspace_id]) return false;
 
     const workspaces = await getSavedWorkspaces();
-    const current_workspace_index = workspaces.findIndex(workspace => workspace.id === workspace_id);
+    const filtered = workspaces.filter(workspace => workspace.id !== workspace_id);
 
-    if (current_workspace_index >= 0) {
-        workspaces.splice(current_workspace_index, 1);
-    }
-
-    await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
+    await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(filtered)));
     return true;
 };
 
