@@ -29,6 +29,7 @@ export const PlatformIcons = {
     DBot,
     Demo,
     Derived,
+    DerivGo,
     DerivGoBlack,
     DerivLogo,
     DerivTradingLogo,
@@ -38,7 +39,7 @@ export const PlatformIcons = {
     Financial,
     SwapFree,
     Options,
-
+    SmartTrader,
     SmartTraderBlue,
     ZeroSpread,
     Standard,
