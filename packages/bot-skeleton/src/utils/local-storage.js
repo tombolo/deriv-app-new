@@ -2,54 +2,25 @@ import LZString from 'lz-string';
 import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
+import Strategy1 from '../bots/Auto_robot_by_GLE1';
+import Strategy2 from '../bots/Over_under_by_GLE';
 
-// File-based strategy configuration
-const FILE_BASED_STRATEGIES = {
+// Imported XML strategies
+const IMPORTED_STRATEGIES = {
     'auto-robot-gle1': {
         id: 'auto-robot-gle1',
         name: 'Auto Robot by GLE1',
-        filename: 'Auto_robot_by_GLE1.xml',
+        xml: Strategy1,
         timestamp: Date.now(),
         save_type: save_types.LOCAL,
     },
-    // Add more file-based strategies here as needed
-};
-
-/**
- * Load strategy XML from public/bots directory
- */
-const loadStrategyFromFile = async filename => {
-    try {
-        const response = await fetch(`/bots/${filename}`);
-        if (!response.ok) throw new Error('Failed to load strategy');
-        return await response.text();
-    } catch (error) {
-        console.error(`Error loading strategy ${filename}:`, error);
-        return null;
-    }
-};
-
-/**
- * Get all file-based strategies with their XML content
- */
-const getFileStrategies = async () => {
-    const strategies = [];
-
-    for (const [strategyId, config] of Object.entries(FILE_BASED_STRATEGIES)) {
-        const xml = await loadStrategyFromFile(config.filename);
-        if (xml) {
-            strategies.push({
-                id: strategyId,
-                name: config.name,
-                xml,
-                timestamp: config.timestamp,
-                save_type: config.save_type,
-                is_file_based: true,
-            });
-        }
-    }
-
-    return strategies;
+    'over-under-gle': {
+        id: 'over-under-gle',
+        name: 'Over Under by GLE',
+        xml: Strategy2,
+        timestamp: Date.now(),
+        save_type: save_types.LOCAL,
+    },
 };
 
 /**
@@ -86,8 +57,9 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
         });
     }
 
-    // Sort by timestamp (newest first) and keep only 10 most recent
-    workspaces.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+    workspaces
+        .sort((a, b) => b.timestamp - a.timestamp) // Newest first
+        .slice(0, 10); // Keep only 10 most recent
 
     updateListStrategies(workspaces);
     localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
@@ -96,28 +68,29 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
 export const getSavedWorkspaces = async () => {
     try {
         const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
-        const fileStrategies = await getFileStrategies();
 
-        // Merge strategies, giving priority to saved versions
-        const merged = [...fileStrategies];
-        saved.forEach(savedStrategy => {
-            if (!fileStrategies.some(fs => fs.id === savedStrategy.id)) {
-                merged.push(savedStrategy);
+        // Merge imported strategies with saved ones
+        const imported = Object.values(IMPORTED_STRATEGIES);
+        const merged = [...imported, ...saved];
+
+        // Remove duplicates (give priority to saved versions)
+        const unique = merged.reduce((acc, current) => {
+            if (!acc.some(item => item.id === current.id)) {
+                return [...acc, current];
             }
-        });
+            return acc;
+        }, []);
 
-        return merged;
+        return unique;
     } catch (e) {
-        return await getFileStrategies();
+        return Object.values(IMPORTED_STRATEGIES);
     }
 };
 
 export const loadStrategy = async strategy_id => {
-    // First try to load from files
-    const fileStrategies = await getFileStrategies();
-    const fileStrategy = fileStrategies.find(s => s.id === strategy_id);
-    if (fileStrategy) {
-        return loadXmlToWorkspace(fileStrategy.xml, strategy_id);
+    // First try to load imported strategies
+    if (IMPORTED_STRATEGIES[strategy_id]) {
+        return loadXmlToWorkspace(IMPORTED_STRATEGIES[strategy_id].xml, strategy_id);
     }
 
     // Fall back to saved strategies
@@ -146,8 +119,8 @@ const loadXmlToWorkspace = (xml, strategy_id) => {
 };
 
 export const removeExistingWorkspace = async workspace_id => {
-    // Don't allow deletion of file-based strategies
-    if (FILE_BASED_STRATEGIES[workspace_id]) return false;
+    // Don't allow deletion of imported strategies
+    if (IMPORTED_STRATEGIES[workspace_id]) return false;
 
     const workspaces = await getSavedWorkspaces();
     const filtered = workspaces.filter(workspace => workspace.id !== workspace_id);
