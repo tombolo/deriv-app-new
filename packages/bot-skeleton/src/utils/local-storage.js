@@ -2,25 +2,44 @@ import LZString from 'lz-string';
 import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
-import Strategy1 from '../bots/Auto_robot_by_GLE1';
-import Strategy2 from '../bots/Over_under_by_GLE';
 
-// Imported XML strategies
-const IMPORTED_STRATEGIES = {
-    'auto-robot-gle1': {
-        id: 'auto-robot-gle1',
-        name: 'Auto Robot by GLE1',
-        xml: Strategy1,
-        timestamp: Date.now(),
-        save_type: save_types.LOCAL,
-    },
-    'over-under-gle': {
-        id: 'over-under-gle',
-        name: 'Over Under by GLE',
-        xml: Strategy2,
-        timestamp: Date.now(),
-        save_type: save_types.LOCAL,
-    },
+const fetchBotXml = async botName => {
+    try {
+        const response = await fetch(`/bots/${botName}.xml`);
+        if (!response.ok) {
+            throw new Error(`Failed to load ${botName} bot`);
+        }
+        return await response.text();
+    } catch (error) {
+        console.error(`Error loading ${botName} bot:`, error);
+        return `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true">
+                  <!-- Error loading ${botName} bot -->
+                </xml>`;
+    }
+};
+
+const getStaticBots = async () => {
+    const [autoRobotXml, overUnderXml] = await Promise.all([
+        fetchBotXml('Auto_robot_by_GLE1'),
+        fetchBotXml('Over_under_bot_by_GLE'),
+    ]);
+
+    return {
+        Auto_robot_by_GLE1: {
+            id: 'Auto_robot_by_GLE1',
+            name: 'Auto robot by GLE1',
+            xml: autoRobotXml,
+            timestamp: Date.now(),
+            save_type: save_types.LOCAL,
+        },
+        Over_under_bot_by_GLE: {
+            id: 'Over_under_bot_by_GLE',
+            name: 'Over under bot by GLE',
+            xml: overUnderXml,
+            timestamp: Date.now(),
+            save_type: save_types.LOCAL,
+        },
+    };
 };
 
 /**
@@ -57,56 +76,45 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
         });
     }
 
-    workspaces
-        .sort((a, b) => b.timestamp - a.timestamp) // Newest first
-        .slice(0, 10); // Keep only 10 most recent
-
+    workspaces.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
     updateListStrategies(workspaces);
-    localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
+    await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
 };
 
 export const getSavedWorkspaces = async () => {
     try {
         const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
+        const staticBots = await getStaticBots();
 
-        // Merge imported strategies with saved ones
-        const imported = Object.values(IMPORTED_STRATEGIES);
-        const merged = [...imported, ...saved];
+        // Merge strategies, giving priority to saved versions
+        const merged = Object.values(staticBots).map(staticBot => {
+            const savedVersion = saved.find(s => s.id === staticBot.id);
+            return savedVersion || staticBot;
+        });
 
-        // Remove duplicates (give priority to saved versions)
-        const unique = merged.reduce((acc, current) => {
-            if (!acc.some(item => item.id === current.id)) {
-                return [...acc, current];
+        // Add saved strategies that aren't static bots
+        saved.forEach(savedStrategy => {
+            if (!staticBots[savedStrategy.id]) {
+                merged.push(savedStrategy);
             }
-            return acc;
-        }, []);
+        });
 
-        return unique;
+        return merged.sort((a, b) => b.timestamp - a.timestamp);
     } catch (e) {
-        return Object.values(IMPORTED_STRATEGIES);
+        console.error('Error loading saved workspaces:', e);
+        return Object.values(await getStaticBots());
     }
 };
 
 export const loadStrategy = async strategy_id => {
-    // First try to load imported strategies
-    if (IMPORTED_STRATEGIES[strategy_id]) {
-        return loadXmlToWorkspace(IMPORTED_STRATEGIES[strategy_id].xml, strategy_id);
-    }
+    const workspaces = await getSavedWorkspaces();
+    const strategy = workspaces.find(workspace => workspace.id === strategy_id);
 
-    // Fall back to saved strategies
-    const savedStrategies = await getSavedWorkspaces();
-    const savedStrategy = savedStrategies.find(s => s.id === strategy_id);
-    if (savedStrategy) {
-        return loadXmlToWorkspace(savedStrategy.xml, strategy_id);
-    }
+    if (!strategy) return false;
 
-    return false;
-};
-
-const loadXmlToWorkspace = (xml, strategy_id) => {
     try {
         const parser = new DOMParser();
-        const xmlDom = parser.parseFromString(xml, 'text/xml').documentElement;
+        const xmlDom = parser.parseFromString(strategy.xml, 'text/xml').documentElement;
         const convertedXml = convertStrategyToIsDbot(xmlDom);
 
         Blockly.Xml.domToWorkspace(convertedXml, Blockly.derivWorkspace);
@@ -119,8 +127,9 @@ const loadXmlToWorkspace = (xml, strategy_id) => {
 };
 
 export const removeExistingWorkspace = async workspace_id => {
-    // Don't allow deletion of imported strategies
-    if (IMPORTED_STRATEGIES[workspace_id]) return false;
+    const staticBots = await getStaticBots();
+    // Don't allow deletion of static bots
+    if (staticBots[workspace_id]) return false;
 
     const workspaces = await getSavedWorkspaces();
     const filtered = workspaces.filter(workspace => workspace.id !== workspace_id);
