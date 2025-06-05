@@ -2,6 +2,41 @@ import LZString from 'lz-string';
 import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
+
+// Hardcoded XML strategies
+const HARDCODED_STRATEGIES = {
+    'gle-traders-1': {
+        id: 'gle-traders-1',
+        name: 'GLE Traders 1',
+        xml: `
+            <xml xmlns="https://developers.google.com/blockly/xml" collection="true" is_dbot="true">
+                <!-- Your GLE Traders 1 blocks here -->
+                <block type="strategies" deletable="false" movable="false">
+                    <field name="STRATEGY_NAME">GLE Traders 1</field>
+                    <!-- Add more blocks as needed -->
+                </block>
+            </xml>
+        `,
+        timestamp: Date.now(),
+        save_type: save_types.LOCAL,
+    },
+    'gle-traders-2': {
+        id: 'gle-traders-2',
+        name: 'GLE Traders 2',
+        xml: `
+            <xml xmlns="https://developers.google.com/blockly/xml" collection="true" is_dbot="true">
+                <!-- Your GLE Traders 2 blocks here -->
+                <block type="strategies" deletable="false" movable="false">
+                    <field name="STRATEGY_NAME">GLE Traders 2</field>
+                    <!-- Add more blocks as needed -->
+                </block>
+            </xml>
+        `,
+        timestamp: Date.now(),
+        save_type: save_types.LOCAL,
+    },
+};
+
 /**
  * Save workspace to localStorage
  * @param {String} save_type // constants/save_types.js (unsaved, local, googledrive)
@@ -51,13 +86,49 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
 
 export const getSavedWorkspaces = async () => {
     try {
-        return JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
+        const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
+
+        // Merge hardcoded strategies with saved ones
+        const hardcoded = Object.values(HARDCODED_STRATEGIES);
+        const merged = [...hardcoded, ...saved];
+
+        // Remove duplicates (in case a hardcoded strategy was modified and saved)
+        const unique = merged.reduce((acc, current) => {
+            const x = acc.find(item => item.id === current.id);
+            if (!x) {
+                return acc.concat([current]);
+            } else {
+                return acc;
+            }
+        }, []);
+
+        return unique;
     } catch (e) {
-        return [];
+        return Object.values(HARDCODED_STRATEGIES);
     }
 };
 
+export const getHardcodedStrategy = strategy_id => {
+    return HARDCODED_STRATEGIES[strategy_id];
+};
+
+export const loadHardcodedStrategy = strategy_id => {
+    const strategy = HARDCODED_STRATEGIES[strategy_id];
+    if (!strategy) return false;
+
+    const parser = new DOMParser();
+    const xmlDom = parser.parseFromString(strategy.xml, 'text/xml').documentElement;
+    const convertedXml = convertStrategyToIsDbot(xmlDom);
+
+    Blockly.Xml.domToWorkspace(convertedXml, Blockly.derivWorkspace);
+    Blockly.derivWorkspace.current_strategy_id = strategy_id;
+    return true;
+};
+
 export const removeExistingWorkspace = async workspace_id => {
+    // Don't allow deletion of hardcoded strategies
+    if (HARDCODED_STRATEGIES[workspace_id]) return false;
+
     const workspaces = await getSavedWorkspaces();
     const current_workspace_index = workspaces.findIndex(workspace => workspace.id === workspace_id);
 
@@ -66,6 +137,7 @@ export const removeExistingWorkspace = async workspace_id => {
     }
 
     await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
+    return true;
 };
 
 export const convertStrategyToIsDbot = xml_dom => {
