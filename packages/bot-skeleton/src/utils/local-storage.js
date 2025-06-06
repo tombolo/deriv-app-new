@@ -2,44 +2,29 @@ import LZString from 'lz-string';
 import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
+import AutoRobot from './bots/deriv_miner_pro.xml';
+import OverUnderBot from './bots/dollar_flipper.xml';
 
-const fetchBotXml = async botName => {
-    try {
-        const response = await fetch(`/videos/${botName}.xml`);
-        if (!response.ok) {
-            throw new Error(`Failed to load ${botName} bot`);
-        }
-        return await response.text();
-    } catch (error) {
-        console.error(`Error loading ${botName} bot:`, error);
-        return `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true">
-                  <!-- Error loading ${botName} bot -->
-                </xml>`;
-    }
+// Static bot configurations
+const STATIC_BOTS = {
+    deriv_miner_pro: {
+        id: 'deriv_miner_pro',
+        name: 'Auto robot by GLE1',
+        xml: AutoRobot,
+        timestamp: Date.now(),
+        save_type: save_types.LOCAL,
+    },
+    dollar_flipper: {
+        id: 'dollar_flipper',
+        name: 'Over under bot by GLE',
+        xml: OverUnderBot,
+        timestamp: Date.now(),
+        save_type: save_types.LOCAL,
+    },
 };
 
-const getStaticBots = async () => {
-    const [autoRobotXml, overUnderXml] = await Promise.all([
-        fetchBotXml('deriv_miner_pro'),
-        fetchBotXml('dollar_flipper'),
-    ]);
-
-    return {
-        Auto_robot_by_GLE1: {
-            id: 'deriv_miner_pro',
-            name: 'Auto robot by GLE1',
-            xml: autoRobotXml,
-            timestamp: Date.now(),
-            save_type: save_types.LOCAL,
-        },
-        Over_under_bot_by_GLE: {
-            id: 'dollar_flipper',
-            name: 'Over under bot by GLE',
-            xml: overUnderXml,
-            timestamp: Date.now(),
-            save_type: save_types.LOCAL,
-        },
-    };
+const getStaticBots = () => {
+    return STATIC_BOTS;
 };
 
 /**
@@ -84,7 +69,7 @@ export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED)
 export const getSavedWorkspaces = async () => {
     try {
         const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
-        const staticBots = await getStaticBots();
+        const staticBots = getStaticBots();
 
         // Merge strategies, giving priority to saved versions
         const merged = Object.values(staticBots).map(staticBot => {
@@ -102,7 +87,7 @@ export const getSavedWorkspaces = async () => {
         return merged.sort((a, b) => b.timestamp - a.timestamp);
     } catch (e) {
         console.error('Error loading saved workspaces:', e);
-        return Object.values(await getStaticBots());
+        return Object.values(getStaticBots());
     }
 };
 
@@ -127,7 +112,7 @@ export const loadStrategy = async strategy_id => {
 };
 
 export const removeExistingWorkspace = async workspace_id => {
-    const staticBots = await getStaticBots();
+    const staticBots = getStaticBots();
     // Don't allow deletion of static bots
     if (staticBots[workspace_id]) return false;
 
