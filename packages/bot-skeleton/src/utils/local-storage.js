@@ -1,11 +1,13 @@
 import { config } from '../constants';
 import { save_types } from '../constants/save-type';
 import DBotStore from '../scratch/dbot-store';
+import { getUrlBase } from '@deriv/shared';
 
 // Function to fetch XML content from public folder
 const fetchBotXml = async botName => {
     try {
-        const response = await fetch(`/bots/${botName}.xml`);
+        const url = getUrlBase(`/bots/${botName}.xml`);
+        const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`Failed to load ${botName} bot`);
         }
