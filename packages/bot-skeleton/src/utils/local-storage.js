@@ -2,20 +2,20 @@ import LZString from 'lz-string';
 import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
 import { save_types } from '../constants/save-type';
-import AutoRobot from './bots/deriv_miner_pro.xml';
-import OverUnderBot from './bots/dollar_flipper.xml';
+import AutoRobot from './bots/auto_robot_by_GLE1.xml';
+import OverUnderBot from './bots/over_under_bot_by_GLE.xml';
 
 // Static bot configurations
 const STATIC_BOTS = {
     deriv_miner_pro: {
-        id: 'deriv_miner_pro',
+        id: 'auto_robot_by_GLE1',
         name: 'Auto robot by GLE1',
         xml: AutoRobot,
         timestamp: Date.now(),
         save_type: save_types.LOCAL,
     },
     dollar_flipper: {
-        id: 'dollar_flipper',
+        id: 'over_under_bot_by_GLE',
         name: 'Over under bot by GLE',
         xml: OverUnderBot,
         timestamp: Date.now(),
