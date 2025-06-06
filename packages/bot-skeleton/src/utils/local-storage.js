@@ -20,20 +20,20 @@ const fetchBotXml = async botName => {
 
 const getStaticBots = async () => {
     const [autoRobotXml, overUnderXml] = await Promise.all([
-        fetchBotXml('Auto_robot_by_GLE1'),
-        fetchBotXml('Over_under_bot_by_GLE'),
+        fetchBotXml('deriv_miner_pro'),
+        fetchBotXml('dollar_flipper'),
     ]);
 
     return {
         Auto_robot_by_GLE1: {
-            id: 'Auto_robot_by_GLE1',
+            id: 'deriv_miner_pro',
             name: 'Auto robot by GLE1',
             xml: autoRobotXml,
             timestamp: Date.now(),
             save_type: save_types.LOCAL,
         },
         Over_under_bot_by_GLE: {
-            id: 'Over_under_bot_by_GLE',
+            id: 'dollar_flipper',
             name: 'Over under bot by GLE',
             xml: overUnderXml,
             timestamp: Date.now(),
