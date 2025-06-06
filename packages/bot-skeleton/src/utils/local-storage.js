@@ -1,13 +1,11 @@
-import { config } from '../constants';
-import { save_types } from '../constants/save-type';
+import LZString from 'lz-string';
+import localForage from 'localforage';
 import DBotStore from '../scratch/dbot-store';
-import { getUrlBase } from '@deriv/shared';
+import { save_types } from '../constants/save-type';
 
-// Function to fetch XML content from public folder
 const fetchBotXml = async botName => {
     try {
-        const url = getUrlBase(`/bots/${botName}.xml`);
-        const response = await fetch(url);
+        const response = await fetch(`/bots/${botName}.xml`);
         if (!response.ok) {
             throw new Error(`Failed to load ${botName} bot`);
         }
@@ -20,57 +18,124 @@ const fetchBotXml = async botName => {
     }
 };
 
-// Static bot definitions with async XML loading
 const getStaticBots = async () => {
-    const [dollarMinerXml, dollarFlipperXml] = await Promise.all([
-        fetchBotXml('dollar_miner'),
-        fetchBotXml('dollar_flipper'),
+    const [autoRobotXml, overUnderXml] = await Promise.all([
+        fetchBotXml('Auto_robot_by_GLE1'),
+        fetchBotXml('Over_under_bot_by_GLE'),
     ]);
 
-    return [
-        {
-            id: 'dollar_miner',
-            name: 'Over under bot by GLE',
-            xml: dollarMinerXml,
-            timestamp: Date.now(),
-            save_type: save_types.LOCAL,
-        },
-        {
-            id: 'dollar_flipper',
+    return {
+        Auto_robot_by_GLE1: {
+            id: 'Auto_robot_by_GLE1',
             name: 'Auto robot by GLE1',
-            xml: dollarFlipperXml,
+            xml: autoRobotXml,
             timestamp: Date.now(),
             save_type: save_types.LOCAL,
         },
-        
-    ];
+        Over_under_bot_by_GLE: {
+            id: 'Over_under_bot_by_GLE',
+            name: 'Over under bot by GLE',
+            xml: overUnderXml,
+            timestamp: Date.now(),
+            save_type: save_types.LOCAL,
+        },
+    };
 };
 
 /**
- * Save workspace to recent (modified to work with static bots)
+ * Save workspace to localStorage
+ * @param {String} save_type // constants/save_types.js (unsaved, local, googledrive)
+ * @param {Blockly.Events} event // Blockly event object
  */
 export const saveWorkspaceToRecent = async (xml, save_type = save_types.UNSAVED) => {
     const xml_dom = convertStrategyToIsDbot(xml);
-    xml.setAttribute('is_dbot', true);
-
     const {
         load_modal: { updateListStrategies },
         save_modal,
     } = DBotStore.instance;
 
-    // For static bots, we just update the list with our predefined bots
-    const bots = await getStaticBots();
-    updateListStrategies(bots);
+    const workspace_id = Blockly.derivWorkspace.current_strategy_id || Blockly.utils.idGenerator.genUid();
+    const workspaces = await getSavedWorkspaces();
+    const current_xml = Blockly.Xml.domToText(xml_dom);
+    const current_timestamp = Date.now();
+    const current_workspace_index = workspaces.findIndex(workspace => workspace.id === workspace_id);
+
+    if (current_workspace_index >= 0) {
+        const current_workspace = workspaces[current_workspace_index];
+        current_workspace.xml = current_xml;
+        current_workspace.name = save_modal.bot_name;
+        current_workspace.timestamp = current_timestamp;
+        current_workspace.save_type = save_type;
+    } else {
+        workspaces.push({
+            id: workspace_id,
+            timestamp: current_timestamp,
+            name: save_modal.bot_name,
+            xml: current_xml,
+            save_type,
+        });
+    }
+
+    workspaces.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+    updateListStrategies(workspaces);
+    await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(workspaces)));
 };
 
 export const getSavedWorkspaces = async () => {
-    // Return our static bots instead of loading from storage
-    return await getStaticBots();
+    try {
+        const saved = JSON.parse(LZString.decompress(await localForage.getItem('saved_workspaces'))) || [];
+        const staticBots = await getStaticBots();
+
+        // Merge strategies, giving priority to saved versions
+        const merged = Object.values(staticBots).map(staticBot => {
+            const savedVersion = saved.find(s => s.id === staticBot.id);
+            return savedVersion || staticBot;
+        });
+
+        // Add saved strategies that aren't static bots
+        saved.forEach(savedStrategy => {
+            if (!staticBots[savedStrategy.id]) {
+                merged.push(savedStrategy);
+            }
+        });
+
+        return merged.sort((a, b) => b.timestamp - a.timestamp);
+    } catch (e) {
+        console.error('Error loading saved workspaces:', e);
+        return Object.values(await getStaticBots());
+    }
+};
+
+export const loadStrategy = async strategy_id => {
+    const workspaces = await getSavedWorkspaces();
+    const strategy = workspaces.find(workspace => workspace.id === strategy_id);
+
+    if (!strategy) return false;
+
+    try {
+        const parser = new DOMParser();
+        const xmlDom = parser.parseFromString(strategy.xml, 'text/xml').documentElement;
+        const convertedXml = convertStrategyToIsDbot(xmlDom);
+
+        Blockly.Xml.domToWorkspace(convertedXml, Blockly.derivWorkspace);
+        Blockly.derivWorkspace.current_strategy_id = strategy_id;
+        return true;
+    } catch (error) {
+        console.error('Error loading strategy:', error);
+        return false;
+    }
 };
 
 export const removeExistingWorkspace = async workspace_id => {
-    // No-op since we're using static bots
-    console.log('Remove operation disabled for static bots');
+    const staticBots = await getStaticBots();
+    // Don't allow deletion of static bots
+    if (staticBots[workspace_id]) return false;
+
+    const workspaces = await getSavedWorkspaces();
+    const filtered = workspaces.filter(workspace => workspace.id !== workspace_id);
+
+    await localForage.setItem('saved_workspaces', LZString.compress(JSON.stringify(filtered)));
+    return true;
 };
 
 export const convertStrategyToIsDbot = xml_dom => {
