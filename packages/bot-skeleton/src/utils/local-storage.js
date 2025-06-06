@@ -20,42 +20,27 @@ const fetchBotXml = async botName => {
 
 // Static bot definitions with async XML loading
 const getStaticBots = async () => {
-    const [dollarMinerXml, dollarFlipperXml, fastMoneyProXml, derivMinerProXml] = await Promise.all([
+    const [dollarMinerXml, dollarFlipperXml] = await Promise.all([
         fetchBotXml('dollar_miner'),
         fetchBotXml('dollar_flipper'),
-        fetchBotXml('fast_money_pro'),
-        fetchBotXml('deriv_miner_pro'),
     ]);
 
     return [
         {
             id: 'dollar_miner',
-            name: 'paigey over 0 ai bot 25',
+            name: 'Over under bot by GLE',
             xml: dollarMinerXml,
             timestamp: Date.now(),
             save_type: save_types.LOCAL,
         },
         {
             id: 'dollar_flipper',
-            name: 'paigey under 7 ai bot 25',
+            name: 'Auto robot by GLE1',
             xml: dollarFlipperXml,
             timestamp: Date.now(),
             save_type: save_types.LOCAL,
         },
-        {
-            id: 'fast_money_pro_',
-            name: 'FPaigeys matches bot 2025',
-            xml: fastMoneyProXml,
-            timestamp: Date.now(),
-            save_type: save_types.LOCAL,
-        },
-        {
-            id: 'deriv_miner_pro',
-            name: 'paigeys new ai bot 2025',
-            xml: derivMinerProXml,
-            timestamp: Date.now(),
-            save_type: save_types.LOCAL,
-        },
+        
     ];
 };
 
