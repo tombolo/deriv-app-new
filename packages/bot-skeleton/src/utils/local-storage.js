@@ -5,7 +5,7 @@ import { save_types } from '../constants/save-type';
 
 const fetchBotXml = async botName => {
     try {
-        const response = await fetch(`/bots/${botName}.xml`);
+        const response = await fetch(`/videos/${botName}.xml`);
         if (!response.ok) {
             throw new Error(`Failed to load ${botName} bot`);
         }
